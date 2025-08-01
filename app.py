@@ -1,108 +1,83 @@
+import streamlit as st
 import pandas as pd
+import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.metrics import ConfusionMatrixDisplay, roc_auc_score, roc_curve
-import numpy as np
-
-df = pd.read_csv("WA_Fn-UseC_-Telco-Customer-Churn.csv")
-print(df.head())
-
-# Check missing values
-print(df.isnull().sum())
-
-# Convert 'TotalCharges' to numeric (it has some non-numeric values)
-df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
-
-# Drop rows with missing TotalCharges
-df = df.dropna(subset=['TotalCharges'])
-
-# Drop customerID as it’s not useful
-df = df.drop('customerID', axis=1)
-
-# Churn count
-sns.countplot(data=df, x='Churn')
-plt.title("Churn Count")
-plt.show()
-
-# Churn by Contract Type
-sns.countplot(data=df, x='Contract', hue='Churn')
-plt.title("Churn by Contract Type")
-plt.xticks(rotation=45)
-plt.show()
-
-#Convert binary Yes/No to 1/0
-df['Churn'] = df['Churn'].map({'Yes': 1, 'No': 0})
-
-# Encode all remaining categorical features
-cat_cols = df.select_dtypes(include='object').columns
-
-df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
-
-plt.figure(figsize=(12, 6))
-sns.heatmap(df.corr()[['Churn']].sort_values(by='Churn', ascending=False), annot=True, cmap='coolwarm')
-plt.title("Feature Correlation with Churn")
-plt.show()
-
-#Features & target
-X = df.drop('Churn', axis=1)
-y = df['Churn']
-
-# Split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-
-# Model
-model = LogisticRegression(max_iter=1000)
-model.fit(X_train, y_train)
-
-# Predictions
-y_pred = model.predict(X_test)
-
-# Results
-print(confusion_matrix(y_test, y_pred))
-print(classification_report(y_test, y_pred))
-
-# Confusion matrix visualization
-ConfusionMatrixDisplay.from_estimator(model, X_test, y_test)
-plt.title("Confusion Matrix")
-plt.show()
-
-# ROC-AUC Curve
-y_prob = model.predict_proba(X_test)[:, 1]
-fpr, tpr, thresholds = roc_curve(y_test, y_prob)
-
-plt.figure()
-plt.plot(fpr, tpr, label=f'AUC = {roc_auc_score(y_test, y_prob):.2f}')
-plt.plot([0, 1], [0, 1], linestyle='--', color='gray')
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.title("ROC Curve")
-plt.legend()
-plt.grid()
-plt.show()
-
-
-coefficients = pd.DataFrame({
-    'Feature': X.columns,
-    'Importance': model.coef_[0]
-}).sort_values(by='Importance', key=np.abs, ascending=False)
-
-print(coefficients.head(10))
-
-# Plot top 10 important features
-plt.figure(figsize=(10, 5))
-sns.barplot(x='Importance', y='Feature', data=coefficients.head(10))
-plt.title("Top 10 Important Features Affecting Churn")
-plt.tight_layout()
-plt.show()
-
-# Save the cleaned dataset
-df.to_csv("cleaned_churn_data.csv", index=False)
-
-# Save model
 import joblib
-joblib.dump(model, "logistic_model.pkl")
 
+st.set_page_config(page_title="Churn Prediction App", layout="wide")
+st.title("📉 Telco Customer Churn Predictor App")
+
+# 📂 Upload CSV file
+uploaded_file = st.file_uploader("Upload Telco Customer Churn Dataset (.csv)", type=["csv"])
+
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    st.subheader("🔍 Raw Data Preview")
+    st.write(df.head())
+
+    # 🧹 Clean data
+    df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
+    df.dropna(inplace=True)
+    df.drop(['customerID'], axis=1, inplace=True)
+    df['Churn'] = df['Churn'].map({'Yes': 1, 'No': 0})
+
+    # 🔁 One-hot encode categorical variables
+    cat_cols = df.select_dtypes(include='object').columns
+    df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
+
+    # 📊 Show churn distribution
+    st.subheader("📊 Churn Distribution")
+    fig, ax = plt.subplots()
+    sns.countplot(x='Churn', data=df, ax=ax)
+    st.pyplot(fig)
+
+    # 🔍 Split data
+    X = df.drop('Churn', axis=1)
+    y = df['Churn']
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+
+    # 📈 Train model
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train, y_train)
+
+    # 🧪 Model Evaluation
+    y_pred = model.predict(X_test)
+    st.subheader("✅ Model Evaluation")
+    st.text("Confusion Matrix")
+    st.write(confusion_matrix(y_test, y_pred))
+
+    st.text("Classification Report")
+    st.text(classification_report(y_test, y_pred))
+
+    # 💾 Save model for future use (optional)
+    joblib.dump(model, "churn_model.pkl")
+    joblib.dump(scaler, "scaler.pkl")
+    joblib.dump(X.columns.tolist(), "features.pkl")
+
+    # 🔍 User input for prediction
+    st.subheader("🔎 Predict Churn for New Customer")
+
+    input_data = {}
+    for col in X.columns:
+        if col.endswith("Yes") or col.endswith("No"):
+            input_data[col] = st.selectbox(col, [0, 1])
+        else:
+            input_data[col] = st.number_input(col, value=0.0)
+
+    if st.button("Predict Churn"):
+        input_df = pd.DataFrame([input_data])
+        input_scaled = scaler.transform(input_df)
+        prediction = model.predict(input_scaled)[0]
+        result = "🚨 Churn" if prediction == 1 else "✅ No Churn"
+        st.success(f"Prediction: {result}")
+else:
+    st.warning("📂 Please upload your dataset to continue.")
