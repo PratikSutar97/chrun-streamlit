@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import seaborn as sns
+import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -80,10 +81,43 @@ if uploaded_file:
             input_scaled = scaler.transform(input_df)
             prediction = model.predict(input_scaled)[0]
             prob = model.predict_proba(input_scaled)[0][1]
+        
+            # Result Message
             if prediction == 1:
                 st.error(f"🚨 This customer is likely to churn! (Probability: {prob:.2f})")
             else:
                 st.success(f"✅ This customer is likely to stay. (Probability: {prob:.2f})")
-
+        
+            # ────────────────────────────────────────────────
+            st.markdown("### 🔄 Churn Probability Meter")
+            st.progress(prob)
+        
+            # Color-coded Risk Level
+            st.markdown("### 🧠 Risk Level:")
+            if prob >= 0.75:
+                st.markdown(f"**🔴 High Risk ({prob:.2f})**")
+            elif prob >= 0.5:
+                st.markdown(f"**🟠 Medium Risk ({prob:.2f})**")
+            else:
+                st.markdown(f"**🟢 Low Risk ({prob:.2f})**")
+        
+            # Gauge Chart with Plotly
+            st.markdown("### 📊 Churn Risk Gauge")
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=prob * 100,
+                title={'text': "Churn Probability (%)"},
+                domain={'x': [0, 1], 'y': [0, 1]},
+                gauge={
+                    'axis': {'range': [0, 100]},
+                    'bar': {'color': "red" if prob > 0.5 else "green"},
+                    'steps': [
+                        {'range': [0, 50], 'color': "lightgreen"},
+                        {'range': [50, 75], 'color': "orange"},
+                        {'range': [75, 100], 'color': "red"},
+                    ],
+                }
+            ))
+            st.plotly_chart(fig)
 else:
     st.warning("Please upload a CSV file to begin.")
